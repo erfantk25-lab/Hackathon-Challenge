@@ -1,0 +1,146 @@
+# ──────────────────────────────────────────────────────────────
+# Secrets and environment
+# ──────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# API keys and tokens (defense in depth)
+*.key
+*.pem
+secrets/
+credentials.json
+
+
+# ──────────────────────────────────────────────────────────────
+# Python
+# ──────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+.python-version
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+
+# Linters
+.ruff_cache/
+
+
+# ──────────────────────────────────────────────────────────────
+# Jupyter / IPython
+# ──────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+
+# ──────────────────────────────────────────────────────────────
+# Databases (local development data)
+# ──────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+postgres-data/
+pgdata/
+
+
+# ──────────────────────────────────────────────────────────────
+# ML artifacts (often big and regeneratable)
+# ──────────────────────────────────────────────────────────────
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.pth
+*.onnx
+models/checkpoints/
+mlruns/
+
+# Sentence-transformers and other model caches
+.cache/
+~/.cache/torch/
+sentence_transformers_cache/
+
+
+# ──────────────────────────────────────────────────────────────
+# Blocket exploration data
+# ──────────────────────────────────────────────────────────────
+# Sample data files can be useful for the team to share,
+# but they grow large fast — commit a couple of examples,
+# ignore the rest
+scripts/sample_data/*.json
+!scripts/sample_data/example_*.json
+!scripts/sample_data/README.md
+
+
+# ──────────────────────────────────────────────────────────────
+# Frontend (if/when you add React)
+# ──────────────────────────────────────────────────────────────
+node_modules/
+dist/
+.next/
+.vite/
+.parcel-cache/
+*.tsbuildinfo
+
+
+# ──────────────────────────────────────────────────────────────
+# IDE / editor
+# ──────────────────────────────────────────────────────────────
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+
+# ──────────────────────────────────────────────────────────────
+# Logs and temp
+# ──────────────────────────────────────────────────────────────
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+
+# ──────────────────────────────────────────────────────────────
+# Docker
+# ──────────────────────────────────────────────────────────────
+docker-compose.override.yml
