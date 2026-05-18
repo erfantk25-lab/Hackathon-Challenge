@@ -1,98 +1,80 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import time
-import datetime
 import random
 
 # --- Konfiguration ---
-st.set_page_config(page_title="Smart Sökning Blocket", page_icon="💠", layout="wide")
+st.set_page_config(layout="wide", page_title="Smart Sökning")
 
-try:
-    from blocket_api import BlocketAPI
-    API_AVAILABLE = True
-except ImportError:
-    BlocketAPI = None
-    API_AVAILABLE = False
+# --- CSS Design ---
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; color: white; }
+    .ad-card { background-color: #1e1e24; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 6px solid #21c354; }
+    .ad-card.suspicious { border-left: 6px solid #ff4b4b; background-color: #3b1c1c; }
+    .trust-badge { font-weight: bold; padding: 2px 8px; border-radius: 5px; }
+</style>
+""", unsafe_allow_html=True)
 
-# --- Session State ---
-if 'all_ads' not in st.session_state: st.session_state.all_ads =[]
-if 'seen_ids' not in st.session_state: st.session_state.seen_ids = set()
-if 'is_scanning' not in st.session_state: st.session_state.is_scanning = False
-if 'api_hits' not in st.session_state: st.session_state.api_hits = 0
-
-def parse_ad(ad):
-    """Extraherar data oavsett format (dict eller objekt)."""
-    try:
-        def get_val(key, d):
-            return ad.get(key, d) if isinstance(ad, dict) else getattr(ad, key, d)
-        
-        title = get_val("title", get_val("subject", "Okänd titel"))
-        price = get_val("price", 0)
-        if isinstance(price, dict): price = price.get("value", 0)
-        elif hasattr(price, "value"): price = price.value
-        
-        return {
-            "id": str(get_val("id", str(time.time()))),
-            "title": str(title),
-            "price": int(price) if str(price).isdigit() else 0,
-            "location": str(get_val("location", "Sverige")),
-            "description": str(get_val("body", get_val("description", ""))),
-            "images": len(get_val("images",[])),
-            "trust_score": round(random.uniform(1, 10), 1), # Simulera analys
-            "is_suspicious": False
-        }
-    except: return None
-
-# --- UI & CSS ---
-st.markdown("""<style>
-    .stApp { background-color: #121216; color: #ffffff; }
-    .ad-card { background-color: #1e1e24; border: 1px solid #2a2a35; border-radius: 12px; padding: 15px; margin-bottom: 10px; }
-    .kpi-card { background-color: #1c1c21; padding: 15px; border-radius: 8px; border: 1px solid #2a2a35; }
-</style>""", unsafe_allow_html=True)
-
-st.title("💠 Smart Sökning Blocket")
-search_query = st.text_input("Sök annonser", "iPhone")
-
-# --- Kontroller ---
-col_sidebar1, col_sidebar2 = st.columns(2)
-if col_sidebar1.button("▶ Starta"): st.session_state.is_scanning = True
-if col_sidebar2.button("⏹ Stoppa"): st.session_state.is_scanning = False
-use_mock = st.toggle("🛠️ Demo-läge", value=True)
-
-# --- Logik ---
-if st.session_state.is_scanning:
-    # 1. API Anrop
-    results = []
-    if use_mock:
-        results =[{"title": f"{search_query} {i}", "price": random.randint(1000, 9000), "id": str(random.random())} for i in range(2)]
-        st.session_state.api_hits = 2
-    elif API_AVAILABLE:
-        try:
-            api = BlocketAPI()
-            # Försök hitta annonser
-            raw = api.search(search_query) if hasattr(api, 'search') else api.custom_search(search_query)
-            results = raw.data if hasattr(raw, 'data') else raw
-            st.session_state.api_hits = len(results)
-        except: st.error("API-fel")
+# --- Logik: Trovärdighetsbedömning ---
+def calculate_trust(title, price):
+    trust = 10
+    title_low = title.lower()
     
-    # 2. Parsa & Spara
-    for r in results:
-        ad = parse_ad(r)
-        if ad and ad['id'] not in st.session_state.seen_ids:
-            ad['is_suspicious'] = ad['price'] < 2000
-            st.session_state.all_ads.append(ad)
-            st.session_state.seen_ids.add(ad['id'])
-            st.toast(f"Hittade: {ad['title']}")
+    if price < 2500 and price > 0: trust -= 6
+    if "ny" in title_low or "obruten" in title_low or "kvitto" in title_low:
+        if price < 4000: trust -= 3
+    if "snabb affär" in title_low: trust -= 2
+    
+    return max(1, min(10, trust))
+
+# --- UI ---
+st.title("💠 Smart Sökning Blocket")
+query = st.text_input("Sök annonser", "iPhone")
+
+if 'ads' not in st.session_state: st.session_state.ads =[]
+
+if st.button("▶ Starta sökning"):
+    try:
+        from blocket_api import BlocketAPI
+        api = BlocketAPI()
+        
+        # Hämta data
+        res = api.search(query) if hasattr(api, 'search') else api.custom_search(query)
+        annonser = res["docs"] if isinstance(res, dict) and "docs" in res else (res if isinstance(res, list) else [])
+        
+        st.session_state.ads =[] 
+        for r in annonser:
+            raw_price = r.get("price", 0)
+            price = raw_price.get("amount", 0) if isinstance(raw_price, dict) else raw_price
+            title = r.get("heading", "Okänd annons")
             
-    time.sleep(2)
+            # Beräkna trovärdighet på riktigt!
+            trust_score = calculate_trust(title, price)
+            
+            st.session_state.ads.append({
+                "title": title,
+                "price": price,
+                "location": r.get("location", "Sverige"),
+                "trust": trust_score
+            })
+    except Exception as e:
+        st.error(f"API-fel: {e}")
+
+if st.button("🗑️ Rensa"):
+    st.session_state.ads =[]
     st.rerun()
 
-# --- Visa Resultat ---
-st.write(f"Hittade i API: {st.session_state.api_hits} st")
-for ad in reversed(st.session_state.all_ads):
-    color = "#fce8e8" if ad['is_suspicious'] else "#1e1e24"
-    st.markdown(f"""<div class="ad-card" style="background-color: {color};">
-        <h3 style="color: {'#991b1b' if ad['is_suspicious'] else '#ffffff'}">{ad['title']}</h3>
-        <p>Pris: {ad['price']} kr | Trovärdighet: {ad['trust_score']}/10</p>
-    </div>""", unsafe_allow_html=True)
+# --- Rendera resultat ---
+st.write(f"### Hittade annonser ({len(st.session_state.ads)})")
+
+for ad in st.session_state.ads:
+    is_suspicious = ad['trust'] < 5
+    css_class = "ad-card suspicious" if is_suspicious else "ad-card"
+    
+    st.markdown(f"""
+    <div class="{css_class}">
+        <h3 style="margin:0;">{ad['title']}</h3>
+        <p style="margin:0;">Pris: {ad['price']} kr | Plats: {ad['location']} | 
+        <span class="trust-badge" style="background:{'#ff4b4b' if is_suspicious else '#21c354'}">
+        Trovärdighet: {ad['trust']}/10</span></p>
+    </div>
+    """, unsafe_allow_html=True)
