@@ -388,12 +388,7 @@ class LLMAnalysis(Base):
 # Embeddings (pgvector)
 # ════════════════════════════════════════════════════════════════
 class ListingEmbedding(Base):
-    """Vector embedding of a listing's title + description.
-
-    Used for semantic search and similarity-based scam detection.
-    Dimension (768) matches KBLab/sentence-bert-swedish-cased.
-    If we switch embedding model, regenerate this whole table.
-    """
+    """Vector embedding of a listing's title + description."""
 
     __tablename__ = "listing_embeddings"
 

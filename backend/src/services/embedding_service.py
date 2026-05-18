@@ -1,82 +1,57 @@
-"""
-Centralised embedding service.
+from openai import AsyncOpenAI
 
-Loads the embedding model once at process startup and reuses it for
-every embedding call — for listings (write path) and search queries
-(read path) alike. Using the same instance everywhere guarantees
-that query and document vectors share the same vector space.
+from src.config import settings
 
-Model: KBLab/sentence-bert-swedish-cased
-- Trained specifically on Swedish by the National Library of Sweden
-- 768-dimensional embeddings
-- Runs locally on CPU; no API calls
-"""
-
-from functools import lru_cache
-
-import numpy as np
-from sentence_transformers import SentenceTransformer
+EMBEDDING_MODEL_NAME = settings.EMBEDDING_MODEL
+EMBEDDING_DIMENSION = settings.EMBEDDING_DIMENSIONS
 
 
-# Single source of truth for which model we use. If this changes,
-# every listing embedding in the database is invalidated and must
-# be regenerated. The dimension must match Vector(N) in models.py.
-EMBEDDING_MODEL_NAME = "KBLab/sentence-bert-swedish-cased"
-EMBEDDING_DIMENSION = 768
+def get_ai_client() -> AsyncOpenAI:
+    kwargs = {"api_key": settings.ai_api_key}
+    if settings.ai_base_url:
+        kwargs["base_url"] = settings.ai_base_url
+    return AsyncOpenAI(**kwargs)
 
 
-@lru_cache(maxsize=1)
-def get_embedding_model() -> SentenceTransformer:
-    """Return the singleton embedding model.
+def listing_text(listing) -> str:
+    parts = [
+        listing.heading or "",
+        listing.description or "",
+        str(listing.price or ""),
+        listing.location or "",
+        listing.category or "",
+    ]
+    return "\n".join(part for part in parts if part).strip()
 
-    Cached so the model is loaded only once per process.
-    - First call: ~5-10 seconds (load from disk)
-    - First-ever call: ~30-60 seconds (downloads ~500 MB from HuggingFace)
-    - Subsequent calls: instant
-    """
-    return SentenceTransformer(EMBEDDING_MODEL_NAME)
 
+async def embed_text(text: str) -> list[float]:
+    text = (text or "").strip()
+    if not text:
+        text = "empty listing"
 
-def embed_text(text: str) -> list[float]:
-    """Convert a piece of text into a normalised 768-dim vector.
-
-    Used both for storing listing embeddings AND for embedding user
-    queries at search time. The same function must be used on both
-    paths so vectors live in the same space.
-
-    Args:
-        text: Any text — listing description, search query, etc.
-
-    Returns:
-        A 768-element list of floats, ready to pass to pgvector.
-    """
-    if not text or not text.strip():
-        # Empty input → zero vector rather than crash
-        return [0.0] * EMBEDDING_DIMENSION
-
-    model = get_embedding_model()
-    vector: np.ndarray = model.encode(
-        text,
-        normalize_embeddings=True,  # essential for cosine distance
+    response = await get_ai_client().embeddings.create(
+        model=settings.EMBEDDING_MODEL,
+        input=text,
     )
-    return vector.tolist()
+    return _validate_embedding(response.data[0].embedding)
 
 
-def embed_batch(texts: list[str]) -> list[list[float]]:
-    """Embed many texts at once.
-
-    Much faster than calling embed_text in a loop because the model
-    processes them in parallel batches. Use this in the sync worker
-    when handling a fresh page of listings.
-    """
-    if not texts:
+async def embed_batch(texts: list[str]) -> list[list[float]]:
+    cleaned = [(text or "empty listing").strip() or "empty listing" for text in texts]
+    if not cleaned:
         return []
 
-    model = get_embedding_model()
-    vectors: np.ndarray = model.encode(
-        texts,
-        normalize_embeddings=True,
-        batch_size=32,
-        show_progress_bar=False,
+    response = await get_ai_client().embeddings.create(
+        model=settings.EMBEDDING_MODEL,
+        input=cleaned,
     )
-    return vectors.tolist()
+    return [_validate_embedding(item.embedding) for item in response.data]
+
+
+def _validate_embedding(vector: list[float]) -> list[float]:
+    if len(vector) != settings.EMBEDDING_DIMENSIONS:
+        raise ValueError(
+            f"Embedding model {settings.EMBEDDING_MODEL!r} returned "
+            f"{len(vector)} dimensions, expected {settings.EMBEDDING_DIMENSIONS}."
+        )
+    return vector
