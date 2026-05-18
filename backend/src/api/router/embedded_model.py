@@ -1,18 +1,19 @@
 """
 AI analysis endpoints.
 
-Provides LLM-based scam analysis using OpenAI GPT-4o-mini. Each
-analysis is cached in the llm_analyses table so we don't pay for
-the same query twice.
+Provides LLM-based scam analysis using OpenAI. Each analysis is
+cached in the llm_analyses table so the same listing isn't
+analysed twice (saves API costs and latency).
 
-Embeddings are handled separately by the sync service using local
-sentence-transformers (see services/embedding_service.py).
+This router only handles LLM analysis. Embeddings are managed
+separately by the sync service using local sentence-transformers.
 """
+
 import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from openai import OpenAIError, AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -32,16 +33,16 @@ def _get_ai_client() -> AsyncOpenAI:
     """Build an OpenAI client from settings.
 
     Kept local to this module since only LLM analysis uses OpenAI.
-    Embeddings use a separate local pipeline.
+    Embeddings use sentence-transformers (local, no API).
     """
     return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 def _json_from_text(text: str) -> dict:
     """Extract a JSON object from a model response.
-    
-    Models sometimes wrap JSON in markdown fences or add prose
-    around it; this strips that and parses the result.
+
+    Some models wrap JSON in markdown fences or add prose around it.
+    This strips that and returns just the parsed JSON.
     """
     text = (text or "").strip()
     if text.startswith("```"):
@@ -54,6 +55,7 @@ def _json_from_text(text: str) -> dict:
 
 
 def _analysis_response(row: LLMAnalysis, cached: bool) -> LLMAnalysisSchema:
+    """Build the user-facing response from a cached or fresh row."""
     data = row.response
     return LLMAnalysisSchema(
         listing_id=row.listing_id,
@@ -68,12 +70,19 @@ def _analysis_response(row: LLMAnalysis, cached: bool) -> LLMAnalysisSchema:
 
 
 def _ai_error(message: str, exc: Exception) -> HTTPException:
+    """Map OpenAI errors to HTTP 502 (bad gateway)."""
     return HTTPException(status_code=502, detail=f"{message}: {exc}")
 
 
 @router.get("/health")
 async def ai_health():
-    """Verify that the OpenAI API is reachable from this backend."""
+    """Verify that the OpenAI API is reachable."""
+    if not settings.OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="OPENAI_API_KEY is not configured",
+        )
+
     try:
         models = await _get_ai_client().models.list()
     except OpenAIError as exc:
@@ -91,15 +100,15 @@ async def analyze_listing(
     db: Session = Depends(get_db),
 ):
     """Run LLM-based scam analysis for a single listing.
-    
-    Cached: if we've already analysed this listing with this prompt
-    version, return the cached result rather than calling OpenAI again.
+
+    Returns cached analysis if one exists for this prompt version.
+    Otherwise calls OpenAI, persists the result, and returns it.
     """
     listing = db.get(Listing, request.listing_id)
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    # Cache lookup
+    # ── Cache check ───────────────────────────────────────────
     cached = (
         db.query(LLMAnalysis)
         .filter(
@@ -113,7 +122,7 @@ async def analyze_listing(
     if cached:
         return _analysis_response(cached, cached=True)
 
-    # Build the prompt payload
+    # ── Build the prompt ──────────────────────────────────────
     prompt = {
         "id": listing.id,
         "category": listing.category,
@@ -124,7 +133,7 @@ async def analyze_listing(
         "seller_type": listing.seller_type,
     }
 
-    # Call the model
+    # ── Call the model ────────────────────────────────────────
     try:
         response = await _get_ai_client().chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -149,7 +158,7 @@ async def analyze_listing(
     except OpenAIError as exc:
         raise _ai_error("AI analysis request failed", exc) from exc
 
-    # Parse and persist
+    # ── Parse and persist ─────────────────────────────────────
     raw = response.choices[0].message.content or "{}"
     try:
         parsed = _json_from_text(raw)

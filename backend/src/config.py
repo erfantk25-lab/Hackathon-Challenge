@@ -3,27 +3,21 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-# Project root is two levels up from this file: src/config.py → src/ → backend/ → root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 ENV_PATH = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
     # ── Database ─────────────────────────────────────────────────
-    DB_USER: str = "hackathon"
-    DB_PASSWORD: str = "hackathon"
+    DB_USER: str = "hackathon_user"
+    DB_PASSWORD: str = "hackathon_password"
     DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_NAME: str = "blocket_smart"
+    DB_PORT: int = 5433
+    DB_NAME: str = "hackathon_db"
 
-    # ── OpenAI ───────────────────────────────────────────────────
-    AI_BASE_URL: str = ""
-    AI_API_KEY: str = ""
-    OPENAI_BASE_URL: str = ""
+    # ── OpenAI (used for LLM analysis only, not embeddings) ──────
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "qwen3:14b"
-    EMBEDDING_MODEL: str = "nomic-embed-text"
-    EMBEDDING_DIMENSIONS: int = 768
+    OPENAI_MODEL: str = "gpt-4o-mini"
 
     # ── Blocket ──────────────────────────────────────────────────
     BLOCKET_BEARER_TOKEN: str = ""
@@ -42,16 +36,8 @@ class Settings(BaseSettings):
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
 
-    @property
-    def ai_base_url(self) -> str | None:
-        return self.OPENAI_BASE_URL or self.AI_BASE_URL or None
-
-    @property
-    def ai_api_key(self) -> str:
-        return self.OPENAI_API_KEY or self.AI_API_KEY or "ollama"
-
     model_config = SettingsConfigDict(
-        env_file=str(ENV_PATH),         # absolut path till .env
+        env_file=str(ENV_PATH),
         env_file_encoding="utf-8",
         extra="ignore",
     )
