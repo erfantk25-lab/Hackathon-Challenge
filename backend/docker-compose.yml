@@ -1,0 +1,32 @@
+services:
+
+
+  backend:
+    build: ./backend
+    container_name: fastapi
+    ports:
+      - "8000:8000"
+    volumes:
+      - $HOME/docker_volumes/backend:/app/logs
+    env_file:
+      - "./.env"
+    depends_on:
+    condition: service_healthy
+    restart: unless-stopped
+
+
+  postgres:
+    image: postgres:16
+    container_name: hackathon_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hackathon_db
+      POSTGRES_USER: hackathon_user
+      POSTGRES_PASSWORD: hackathon_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
