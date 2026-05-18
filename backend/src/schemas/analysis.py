@@ -49,3 +49,10 @@ class LLMAnalysis(BaseModel):
     green_flags: list[str] = []
     cached: bool = False                               # whether served from cache
     analyzed_at: datetime
+
+
+class VectorizeResult(BaseModel):
+    embedded: int
+    model: str
+    dimensions: Optional[int] = None
+    listing_ids: list[int] = []
