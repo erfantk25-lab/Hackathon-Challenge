@@ -1,6 +1,5 @@
 services:
   postgres:
-    # pgvector image includes the extension — required for embeddings
     image: pgvector/pgvector:pg16
     container_name: hackathon_postgres
     restart: unless-stopped
@@ -9,12 +8,9 @@ services:
       POSTGRES_USER: hackathon_user
       POSTGRES_PASSWORD: hackathon_password
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Auto-create the pgvector extension on first startup.
-      # Scripts in /docker-entrypoint-initdb.d/ run only on a
-      # fresh data volume — re-run by deleting the volume.
       - ./docker/init-pgvector.sql:/docker-entrypoint-initdb.d/01-pgvector.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hackathon_user -d hackathon_db"]
@@ -23,22 +19,21 @@ services:
       retries: 5
 
   backend:
-    build: .
+    build:
+      context: ./backend            # ← Dockerfile + src finns här
+      dockerfile: Dockerfile
     container_name: fastapi
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - .env                        # .env ligger kvar i roten
     environment:
-      # Override DB_HOST since we're inside the docker network now
       DB_HOST: postgres
     depends_on:
       postgres:
         condition: service_healthy
-    # Mount source code for hot-reload during development
     volumes:
-      - ./src:/app/src
-    # --reload picks up code changes without a rebuild
+      - ./backend/src:/app/src      # ← uppdaterad path
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:

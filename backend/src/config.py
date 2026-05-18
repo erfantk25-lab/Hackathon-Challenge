@@ -1,10 +1,16 @@
 """
 Application settings loaded from environment variables.
 
-Uses pydantic-settings to read .env in development. In production
-the same variables would come from the host environment instead.
+Reads .env from the project root (one level up from backend/).
 """
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Project root is two levels up from this file: src/config.py → src/ → backend/ → root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+ENV_PATH = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -17,26 +23,15 @@ class Settings(BaseSettings):
 
     # ── OpenAI ───────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
-    # gpt-4o-mini is the budget option: cheap, fast, plenty for
-    # listing analysis and search summaries. Bump to gpt-4o only
-    # if a specific feature actually needs it.
     OPENAI_MODEL: str = "gpt-4o-mini"
 
     # ── Blocket ──────────────────────────────────────────────────
-    # Optional. Only needed if we use endpoints that require auth
-    # (saved searches / "Bevakningar"). Public search works without.
     BLOCKET_BEARER_TOKEN: str = ""
 
     # ── App behaviour ────────────────────────────────────────────
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
-
-    # How often the sync worker polls Blocket (seconds)
     SYNC_INTERVAL_SECONDS: int = 30
-
-    # Demo mode: when true, the API serves cached data instead of
-    # hitting Blocket live. Useful during the actual demo so we
-    # never get rate-limited mid-presentation.
     DEMO_MODE: bool = False
 
     @property
@@ -48,11 +43,10 @@ class Settings(BaseSettings):
         )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_PATH),         # absolut path till .env
         env_file_encoding="utf-8",
-        extra="ignore",  # don't crash on unknown vars in .env
+        extra="ignore",
     )
 
 
-# Single shared instance used throughout the app
 settings = Settings()
