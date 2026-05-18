@@ -14,7 +14,7 @@ from openai import OpenAI, OpenAIError
 ROOT_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
-st.set_page_config(layout="wide", page_title="Smart Sokning")
+st.set_page_config(layout="wide", page_title="Smart Sökning")
 
 st.markdown(
     """
