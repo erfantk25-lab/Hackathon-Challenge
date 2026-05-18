@@ -1,9 +1,13 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from src.db.core import engine, Base
+import src.db.models  # noqa: F401 — registers models
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # On startup: ensure tables exist. Idempotent — only creates
+    # what's missing. In production you'd use Alembic instead.
+    Base.metadata.create_all(bind=engine)
+    yield
+    # On shutdown: nothing for now
 
-app = FastAPI(title="Hackathon Backend")
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+app = FastAPI(title="Hackathon Backend", lifespan=lifespan)
