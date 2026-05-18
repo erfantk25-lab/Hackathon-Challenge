@@ -37,6 +37,9 @@ from src.services.embedding_service import (
 from src.services.parsing.cars import parse_car_listing
 from src.services.parsing.electronics import parse_electronics_listing
 
+from src.scoring.engine import score_ad
+from src.scoring.isolation import detector
+
 
 # Pause between Blocket API calls to avoid rate limiting
 REQUEST_DELAY_SECONDS = 1.0
