@@ -267,7 +267,7 @@ def fetch_real_ads(intent: SearchIntent) -> list[dict[str, Any]]:
 
 def ask_ai_to_score(prompt: str, ads: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str]:
     if not ads:
-        return [], "Inga liveannonser togs emot fran Blocket for den har prompten."
+        return [], "Inga liveannonser togs emot från Blocket for den har prompten."
 
     client = get_openai_client()
     compact_ads = [
@@ -359,7 +359,7 @@ def run_search(prompt: str) -> None:
 if "ads" not in st.session_state:
     st.session_state.ads = []
 if "source" not in st.session_state:
-    st.session_state.source = "Ingen sokning an"
+    st.session_state.source = "Ingen sökning än"
 if "raw_count" not in st.session_state:
     st.session_state.raw_count = 0
 if "result_comment" not in st.session_state:
@@ -371,7 +371,7 @@ if "detail_cache" not in st.session_state:
 def get_cached_detail(ad: dict[str, Any], index: int) -> dict[str, Any]:
     cache_key = ad.get("id") or str(index)
     if cache_key not in st.session_state.detail_cache:
-        with st.spinner("Hamtar detaljer och bilder fran Blocket..."):
+        with st.spinner("Hamtar detaljer och bilder från Blocket..."):
             st.session_state.detail_cache[cache_key] = fetch_listing_detail(ad)
     return st.session_state.detail_cache[cache_key]
 
@@ -394,7 +394,7 @@ def show_listing_dialog(index: int) -> None:
     if image_urls:
         st.image(image_urls, width=260)
     else:
-        st.info("Inga bilder kom med fran Blocket for den har annonsen.")
+        st.info("Inga bilder kom med från Blocket for den har annonsen.")
 
     st.write("**AI-bedömning**")
     st.write(detail.get("match_reason") or "AI-matchning baserad på prompten.")
@@ -415,7 +415,7 @@ def show_listing_dialog(index: int) -> None:
     st.link_button("öppna annonsen på Blocket", detail.get("url") or "https://www.blocket.se/")
 
 
-st.title("Smart Sokning på Blocket")
+st.title("Smart sokning på Blocket")
 
 with st.form("search_form"):
     prompt = st.text_input(
@@ -434,7 +434,7 @@ if submitted:
         except OpenAIError as exc:
             st.error(f"OpenAI-anropet misslyckades: {exc}")
         except Exception as exc:
-            st.error(f"Sokningen misslyckades: {exc}")
+            st.error(f"sokningen misslyckades: {exc}")
 
 intent = st.session_state.get("intent")
 ads = st.session_state.ads
