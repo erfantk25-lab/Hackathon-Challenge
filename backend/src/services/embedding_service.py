@@ -1,57 +1,55 @@
-from openai import AsyncOpenAI
+"""
+Centralised embedding service.
 
-from src.config import settings
+Loads the embedding model once at process startup and reuses it for
+every embedding call — for listings (write path) and search queries
+(read path) alike.
+"""
 
-EMBEDDING_MODEL_NAME = settings.EMBEDDING_MODEL
-EMBEDDING_DIMENSION = settings.EMBEDDING_DIMENSIONS
+from functools import lru_cache
 
-
-def get_ai_client() -> AsyncOpenAI:
-    kwargs = {"api_key": settings.ai_api_key}
-    if settings.ai_base_url:
-        kwargs["base_url"] = settings.ai_base_url
-    return AsyncOpenAI(**kwargs)
-
-
-def listing_text(listing) -> str:
-    parts = [
-        listing.heading or "",
-        listing.description or "",
-        str(listing.price or ""),
-        listing.location or "",
-        listing.category or "",
-    ]
-    return "\n".join(part for part in parts if part).strip()
+import numpy as np
+from sentence_transformers import SentenceTransformer
 
 
-async def embed_text(text: str) -> list[float]:
-    text = (text or "").strip()
-    if not text:
-        text = "empty listing"
+EMBEDDING_MODEL_NAME = "KBLab/sentence-bert-swedish-cased"
+EMBEDDING_DIMENSION = 768
 
-    response = await get_ai_client().embeddings.create(
-        model=settings.EMBEDDING_MODEL,
-        input=text,
+
+@lru_cache(maxsize=1)
+def get_embedding_model() -> SentenceTransformer:
+    """Return the singleton embedding model."""
+    return SentenceTransformer(EMBEDDING_MODEL_NAME)
+
+
+def embed_text(text: str) -> list[float]:
+    """Convert text into a normalised 768-dim vector.
+
+    Used for both write path (saving listing embeddings) and read
+    path (search queries). Same function on both paths guarantees
+    vectors live in the same space.
+    """
+    if not text or not text.strip():
+        return [0.0] * EMBEDDING_DIMENSION
+
+    model = get_embedding_model()
+    vector: np.ndarray = model.encode(
+        text,
+        normalize_embeddings=True,
     )
-    return _validate_embedding(response.data[0].embedding)
+    return vector.tolist()
 
 
-async def embed_batch(texts: list[str]) -> list[list[float]]:
-    cleaned = [(text or "empty listing").strip() or "empty listing" for text in texts]
-    if not cleaned:
+def embed_batch(texts: list[str]) -> list[list[float]]:
+    """Embed many texts at once — faster than one-at-a-time."""
+    if not texts:
         return []
 
-    response = await get_ai_client().embeddings.create(
-        model=settings.EMBEDDING_MODEL,
-        input=cleaned,
+    model = get_embedding_model()
+    vectors: np.ndarray = model.encode(
+        texts,
+        normalize_embeddings=True,
+        batch_size=32,
+        show_progress_bar=False,
     )
-    return [_validate_embedding(item.embedding) for item in response.data]
-
-
-def _validate_embedding(vector: list[float]) -> list[float]:
-    if len(vector) != settings.EMBEDDING_DIMENSIONS:
-        raise ValueError(
-            f"Embedding model {settings.EMBEDDING_MODEL!r} returned "
-            f"{len(vector)} dimensions, expected {settings.EMBEDDING_DIMENSIONS}."
-        )
-    return vector
+    return vectors.tolist()

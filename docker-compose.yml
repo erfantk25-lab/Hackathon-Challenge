@@ -20,20 +20,21 @@ services:
 
   backend:
     build:
-      context: ./backend            # ← Dockerfile + src finns här
+      context: ./backend
       dockerfile: Dockerfile
     container_name: fastapi
     ports:
       - "8000:8000"
     env_file:
-      - .env                        # .env ligger kvar i roten
+      - .env
     environment:
       DB_HOST: postgres
+      DB_PORT: 5432            # ← lägg till denna rad
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend/src:/app/src      # ← uppdaterad path
+      - ./backend/src:/app/src
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:

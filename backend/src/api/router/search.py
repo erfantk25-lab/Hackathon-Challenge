@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from openai import OpenAIError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -35,7 +34,11 @@ def _normalize_category(category: str | None) -> str | None:
     return normalized
 
 
-def _listing_to_dict(listing: Listing, score: CredibilityScore | None = None, distance: float | None = None) -> dict:
+def _listing_to_dict(
+    listing: Listing,
+    score: CredibilityScore | None = None,
+    distance: float | None = None,
+) -> dict:
     reasons = score.reasons if score else []
     return {
         "id": listing.id,
@@ -57,28 +60,46 @@ def _listing_to_dict(listing: Listing, score: CredibilityScore | None = None, di
             if score and score.scam_probability is not None
             else None
         ),
-        "flags": [reason.get("code") for reason in reasons if isinstance(reason, dict) and reason.get("code")],
+        "flags": [
+            reason.get("code")
+            for reason in reasons
+            if isinstance(reason, dict) and reason.get("code")
+        ],
         "semantic_distance": distance,
     }
 
 
 def _latest_scores(db: Session, listing_ids: list[int]) -> dict[int, CredibilityScore]:
+    """Return the most recent score per listing_id.
+
+    Uses PostgreSQL's DISTINCT ON to get exactly one row per
+    listing — the one with the highest scored_at.
+    """
     if not listing_ids:
         return {}
 
-    rows = (
-        db.query(CredibilityScore)
-        .filter(CredibilityScore.listing_id.in_(listing_ids))
-        .order_by(CredibilityScore.listing_id, CredibilityScore.scored_at.desc())
-        .all()
-    )
-    latest = {}
-    for row in rows:
-        latest.setdefault(row.listing_id, row)
-    return latest
+    from sqlalchemy import text
+
+    rows = db.execute(
+        text("""
+        SELECT DISTINCT ON (listing_id) *
+        FROM credibility_scores
+        WHERE listing_id = ANY(:ids)
+        ORDER BY listing_id, scored_at DESC
+    """),
+        {"ids": listing_ids},
+    ).fetchall()
+
+    return {row.listing_id: row for row in rows}
 
 
-def _base_filters(query, category: str | None, location: str | None, min_price: Decimal | None, max_price: Decimal | None):
+def _base_filters(
+    query,
+    category: str | None,
+    location: str | None,
+    min_price: Decimal | None,
+    max_price: Decimal | None,
+):
     if category:
         query = query.filter(Listing.category == category)
     if location:
@@ -112,11 +133,15 @@ async def search_listings(
         vector_count = db.query(ListingEmbedding).count()
         if vector_count:
             try:
-                query_vector = await embed_text(q)
-            except (OpenAIError, ValueError) as exc:
-                raise HTTPException(status_code=502, detail=f"Embedding request failed: {exc}") from exc
+                query_vector = embed_text(q)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=500, detail=f"Embedding failed: {exc}"
+                ) from exc
 
-            distance = ListingEmbedding.embedding.cosine_distance(query_vector).label("semantic_distance")
+            distance = ListingEmbedding.embedding.cosine_distance(query_vector).label(
+                "semantic_distance"
+            )
             rows = (
                 db.query(Listing, distance)
                 .join(ListingEmbedding, ListingEmbedding.listing_id == Listing.id)
@@ -187,7 +212,9 @@ async def similar_listings(
     if not source:
         raise HTTPException(status_code=404, detail="Listing has no embedding yet")
 
-    distance = ListingEmbedding.embedding.cosine_distance(source.embedding).label("semantic_distance")
+    distance = ListingEmbedding.embedding.cosine_distance(source.embedding).label(
+        "semantic_distance"
+    )
     rows = (
         db.query(Listing, distance)
         .join(ListingEmbedding, ListingEmbedding.listing_id == Listing.id)
