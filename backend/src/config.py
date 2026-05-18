@@ -1,8 +1,3 @@
-"""
-Application settings loaded from environment variables.
-
-Reads .env from the project root (one level up from backend/).
-"""
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,8 +17,13 @@ class Settings(BaseSettings):
     DB_NAME: str = "blocket_smart"
 
     # ── OpenAI ───────────────────────────────────────────────────
+    AI_BASE_URL: str = ""
+    AI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = ""
     OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MODEL: str = "qwen3:14b"
+    EMBEDDING_MODEL: str = "nomic-embed-text"
+    EMBEDDING_DIMENSIONS: int = 768
 
     # ── Blocket ──────────────────────────────────────────────────
     BLOCKET_BEARER_TOKEN: str = ""
@@ -41,6 +41,14 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
+
+    @property
+    def ai_base_url(self) -> str | None:
+        return self.OPENAI_BASE_URL or self.AI_BASE_URL or None
+
+    @property
+    def ai_api_key(self) -> str:
+        return self.OPENAI_API_KEY or self.AI_API_KEY or "ollama"
 
     model_config = SettingsConfigDict(
         env_file=str(ENV_PATH),         # absolut path till .env
