@@ -397,7 +397,7 @@ def show_listing_dialog(index: int) -> None:
         st.info("Inga bilder kom med fran Blocket for den har annonsen.")
 
     st.write("**AI-bedömning**")
-    st.write(detail.get("match_reason") or "AI-matchning baserad pa prompten.")
+    st.write(detail.get("match_reason") or "AI-matchning baserad på prompten.")
     for reason in detail.get("reasons", []):
         st.write(f"- {reason}")
 
@@ -412,10 +412,10 @@ def show_listing_dialog(index: int) -> None:
     if detail.get("detail_error"):
         st.warning(f"Kunde inte hamta detaljsidan, visar sokresultatet: {detail['detail_error']}")
 
-    st.link_button("öppna annonsen pa Blocket", detail.get("url") or "https://www.blocket.se/")
+    st.link_button("öppna annonsen på Blocket", detail.get("url") or "https://www.blocket.se/")
 
 
-st.title("Smart Sokning pa Blocket")
+st.title("Smart Sokning på Blocket")
 
 with st.form("search_form"):
     prompt = st.text_input(
@@ -491,7 +491,7 @@ for index, ad in enumerate(ads):
     location = html.escape(ad["location"])
     url = html.escape(ad.get("url") or "https://www.blocket.se/")
     reasons = "".join(f"<p class='reason'>- {html.escape(reason)}</p>" for reason in ad["reasons"])
-    match_reason = html.escape(ad.get("match_reason") or "AI-matchning baserad pa prompten.")
+    match_reason = html.escape(ad.get("match_reason") or "AI-matchning baserad på prompten.")
 
     st.markdown(
         f"""
@@ -503,7 +503,7 @@ for index, ad in enumerate(ads):
   <div class="ad-meta">{ad['price']} kr | {location} | {ad.get('seller_type', 'private')} | match {ad['match_score']}/10</div>
   <p class="reason">{match_reason}</p>
   {reasons}
-  <p class="subtle"><a href="{url}" target="_blank">öppna pa Blocket</a></p>
+  <p class="subtle"><a href="{url}" target="_blank">öppna på Blocket</a></p>
 </div>
 """,
         unsafe_allow_html=True,
