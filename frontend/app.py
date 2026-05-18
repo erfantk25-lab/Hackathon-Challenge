@@ -416,7 +416,6 @@ def show_listing_dialog(index: int) -> None:
 
 
 st.title("Smart Sokning pa Blocket")
-st.caption("Skriv vad du vill ha. OpenAI tolkar prompten, Blocket hamtar liveannonser, OpenAI rankar och forklarar.")
 
 with st.form("search_form"):
     prompt = st.text_input(
