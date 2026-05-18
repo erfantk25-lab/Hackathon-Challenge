@@ -371,7 +371,7 @@ if "detail_cache" not in st.session_state:
 def get_cached_detail(ad: dict[str, Any], index: int) -> dict[str, Any]:
     cache_key = ad.get("id") or str(index)
     if cache_key not in st.session_state.detail_cache:
-        with st.spinner("Hamtar detaljer och bilder från Blocket..."):
+        with st.spinner("hämtar detaljer och bilder från Blocket..."):
             st.session_state.detail_cache[cache_key] = fetch_listing_detail(ad)
     return st.session_state.detail_cache[cache_key]
 
@@ -426,7 +426,7 @@ with st.form("search_form"):
     submitted = st.form_submit_button("Hamta annonser med AI")
 
 if submitted:
-    with st.spinner("Tolkar prompt, hamtar Blocket-annonser och analyserar med AI..."):
+    with st.spinner("Tolkar prompten, hämtar Blocket-annonser och analyserar med AI..."):
         try:
             run_search(prompt)
         except ImportError as exc:
