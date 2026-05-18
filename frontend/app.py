@@ -412,7 +412,7 @@ def show_listing_dialog(index: int) -> None:
     if detail.get("detail_error"):
         st.warning(f"Kunde inte hamta detaljsidan, visar sokresultatet: {detail['detail_error']}")
 
-    st.link_button("Oppna annonsen pa Blocket", detail.get("url") or "https://www.blocket.se/")
+    st.link_button("öppna annonsen pa Blocket", detail.get("url") or "https://www.blocket.se/")
 
 
 st.title("Smart Sokning pa Blocket")
@@ -443,13 +443,14 @@ trusted = len([ad for ad in ads if ad["trust"] >= 7])
 suspicious = len([ad for ad in ads if ad["trust"] <= 5])
 
 if intent:
-    max_price_text = f"{intent.max_price:,} kr".replace(",", " ") if intent.max_price else "ingen"
-    st.info(
-        "AI-tolkat som: "
-        f"sok='{intent.query}', kategori='{intent.category or 'alla'}', "
-        f"plats='{intent.location or 'alla'}', maxpris='{max_price_text}', "
-        f"misstankta='{intent.suspicious_only}'. Kalla: {st.session_state.source}."
-    )
+    if st.toggle("Visa AI-tolkning"):
+        max_price_text = f"{intent.max_price:,} kr".replace(",", " ") if intent.max_price else "ingen"
+        st.info(
+            "AI-tolkat som: "
+            f"sok='{intent.query}', kategori='{intent.category or 'alla'}', "
+            f"plats='{intent.location or 'alla'}', maxpris='{max_price_text}', "
+            f"misstankta='{intent.suspicious_only}'. Källa: {st.session_state.source}."
+        )
 
 st.markdown(
     f"""
@@ -503,7 +504,7 @@ for index, ad in enumerate(ads):
   <div class="ad-meta">{ad['price']} kr | {location} | {ad.get('seller_type', 'private')} | match {ad['match_score']}/10</div>
   <p class="reason">{match_reason}</p>
   {reasons}
-  <p class="subtle"><a href="{url}" target="_blank">Oppna pa Blocket</a></p>
+  <p class="subtle"><a href="{url}" target="_blank">öppna pa Blocket</a></p>
 </div>
 """,
         unsafe_allow_html=True,
