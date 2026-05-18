@@ -33,6 +33,10 @@ st.markdown(
     .ad-meta { color: #cbd5e1; margin: 8px 0 10px; }
     .trust-badge { white-space: nowrap; color: #05120a; font-weight: 800; padding: 4px 9px; border-radius: 999px; }
     .reason { color: #d0d5dd; margin: 4px 0 0; }
+    .detail-box { background: #12161d; border: 1px solid #334155; border-radius: 8px; padding: 18px; margin: 14px 0 22px; }
+    .detail-box h2 { margin-top: 0; font-size: 24px; }
+    .detail-meta { color: #cbd5e1; margin-bottom: 12px; }
+    .summary-box { background: #10201b; border: 1px solid #1f8f5f; border-radius: 8px; padding: 14px 16px; margin: 12px 0 18px; }
     .subtle { color: #98a2b3; }
     a { color: #86efac !important; }
 </style>
@@ -150,8 +154,33 @@ def extract_location(raw_location: Any) -> str:
     return str(raw_location or "Sverige")
 
 
+def extract_image_urls(raw: dict[str, Any]) -> list[str]:
+    urls: list[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, str) and value.startswith("http"):
+            urls.append(value)
+        elif isinstance(value, dict):
+            add(value.get("url") or value.get("uri"))
+        elif isinstance(value, list):
+            for item in value:
+                add(item)
+
+    add(raw.get("image_urls"))
+    add(raw.get("images"))
+    add(raw.get("image"))
+    add(raw.get("thumbnail"))
+    add(raw.get("thumbnail_url"))
+
+    deduped: list[str] = []
+    for url in urls:
+        if url not in deduped:
+            deduped.append(url)
+    return deduped
+
+
 def normalize_api_ad(raw: dict[str, Any], category: str | None) -> dict[str, Any]:
-    images = raw.get("images") or raw.get("image_urls") or []
+    image_urls = extract_image_urls(raw)
     flags = raw.get("flags") or []
     ad_id = raw.get("ad_id") or raw.get("id")
     return {
@@ -162,8 +191,53 @@ def normalize_api_ad(raw: dict[str, Any], category: str | None) -> dict[str, Any
         "location": extract_location(raw.get("location")),
         "category": category or "electronics",
         "url": raw.get("share_url") or raw.get("url") or raw.get("canonical_url") or "https://www.blocket.se/",
-        "image_count": len(images) if isinstance(images, list) else 0,
+        "image_urls": image_urls,
+        "image_count": len(image_urls),
         "seller_type": "company" if "company" in str(flags).lower() else "private",
+    }
+
+
+def fetch_listing_detail(ad: dict[str, Any]) -> dict[str, Any]:
+    if not ad.get("id"):
+        return ad
+
+    try:
+        from blocket_api import BlocketAPI, RecommerceAd  # type: ignore
+
+        detail = BlocketAPI().get_ad(RecommerceAd(int(ad["id"])))
+    except Exception as exc:
+        return {**ad, "detail_error": str(exc)}
+
+    loader = detail.get("loaderData", {}) if isinstance(detail, dict) else {}
+    page = loader.get("item-recommerce", {}) if isinstance(loader, dict) else {}
+    item = page.get("itemData", {}) if isinstance(page, dict) else {}
+    meta = page.get("meta", {}) if isinstance(page, dict) else {}
+
+    detail_images = extract_image_urls(item)
+    if isinstance(meta.get("image"), dict):
+        detail_images.extend(extract_image_urls({"image": meta["image"]}))
+
+    merged_images = []
+    for url in [*detail_images, *ad.get("image_urls", [])]:
+        if url and url not in merged_images:
+            merged_images.append(url)
+
+    extras = []
+    for extra in item.get("extras", []) if isinstance(item, dict) else []:
+        if isinstance(extra, dict) and extra.get("label") and extra.get("value"):
+            extras.append(f"{extra['label']}: {extra['value']}")
+
+    return {
+        **ad,
+        "title": item.get("title") or ad["title"],
+        "description": item.get("description") or ad.get("description", ""),
+        "price": extract_price(item.get("price")) or ad["price"],
+        "location": extract_location(item.get("location")) if item.get("location") else ad["location"],
+        "url": meta.get("canonical") or ad["url"],
+        "image_urls": merged_images,
+        "image_count": len(merged_images),
+        "extras": extras,
+        "detail_loaded": True,
     }
 
 
@@ -191,9 +265,9 @@ def fetch_real_ads(intent: SearchIntent) -> list[dict[str, Any]]:
     return ads
 
 
-def ask_ai_to_score(prompt: str, ads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def ask_ai_to_score(prompt: str, ads: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str]:
     if not ads:
-        return []
+        return [], "Inga liveannonser togs emot fran Blocket for den har prompten."
 
     client = get_openai_client()
     compact_ads = [
@@ -218,7 +292,8 @@ def ask_ai_to_score(prompt: str, ads: list[dict[str, Any]]) -> list[dict[str, An
                 "content": (
                     "You are a Swedish classified-ad risk analyst. Rank the real Blocket "
                     "listings against the user's prompt and estimate trust. Return only JSON: "
-                    "{\"results\":[{\"index\":0,\"trust\":1-10,\"match_score\":1-10,"
+                    "{\"overall_comment\":\"short Swedish comment about the received result set\","
+                    "\"results\":[{\"index\":0,\"trust\":1-10,\"match_score\":1-10,"
                     "\"reasons\":[\"short Swedish reason\"],\"match_reason\":\"short Swedish text\"}]}. "
                     "Use only the listing data provided. Do not invent facts."
                 ),
@@ -234,6 +309,10 @@ def ask_ai_to_score(prompt: str, ads: list[dict[str, Any]]) -> list[dict[str, An
         temperature=0.2,
     )
     parsed = json_from_text(response.choices[0].message.content or "{}")
+    overall_comment = str(
+        parsed.get("overall_comment")
+        or "AI analyserade annonserna men gav ingen separat sammanfattning."
+    )
     by_index = {
         int(item["index"]): item
         for item in parsed.get("results", [])
@@ -258,13 +337,13 @@ def ask_ai_to_score(prompt: str, ads: list[dict[str, Any]]) -> list[dict[str, An
             }
         )
     scored.sort(key=lambda item: (-item["match_score"], -item["trust"], item["price"] or 0))
-    return scored
+    return scored, overall_comment
 
 
 def run_search(prompt: str) -> None:
     intent = ask_ai_for_intent(prompt)
     ads = fetch_real_ads(intent)
-    scored_ads = ask_ai_to_score(prompt, ads)
+    scored_ads, result_comment = ask_ai_to_score(prompt, ads)
     if intent.min_trust:
         scored_ads = [ad for ad in scored_ads if ad["trust"] >= intent.min_trust]
     if intent.suspicious_only:
@@ -273,6 +352,7 @@ def run_search(prompt: str) -> None:
     st.session_state.intent = intent
     st.session_state.ads = scored_ads
     st.session_state.raw_count = len(ads)
+    st.session_state.result_comment = result_comment
     st.session_state.source = f"Live Blocket API + OpenAI {get_model_name()}"
 
 
@@ -282,6 +362,57 @@ if "source" not in st.session_state:
     st.session_state.source = "Ingen sokning an"
 if "raw_count" not in st.session_state:
     st.session_state.raw_count = 0
+if "result_comment" not in st.session_state:
+    st.session_state.result_comment = ""
+if "detail_cache" not in st.session_state:
+    st.session_state.detail_cache = {}
+
+
+def get_cached_detail(ad: dict[str, Any], index: int) -> dict[str, Any]:
+    cache_key = ad.get("id") or str(index)
+    if cache_key not in st.session_state.detail_cache:
+        with st.spinner("Hamtar detaljer och bilder fran Blocket..."):
+            st.session_state.detail_cache[cache_key] = fetch_listing_detail(ad)
+    return st.session_state.detail_cache[cache_key]
+
+
+@st.dialog("Annonsinfo")
+def show_listing_dialog(index: int) -> None:
+    if index < 0 or index >= len(st.session_state.ads):
+        st.warning("Annonsen finns inte langre i resultatlistan.")
+        return
+
+    detail = get_cached_detail(st.session_state.ads[index], index)
+
+    st.subheader(detail["title"])
+    st.write(
+        f"{detail['price']} kr | {detail['location']} | "
+        f"trovärdighet {detail['trust']}/10 | match {detail['match_score']}/10"
+    )
+
+    image_urls = detail.get("image_urls", [])
+    if image_urls:
+        st.image(image_urls, width=260)
+    else:
+        st.info("Inga bilder kom med fran Blocket for den har annonsen.")
+
+    st.write("**AI-bedömning**")
+    st.write(detail.get("match_reason") or "AI-matchning baserad pa prompten.")
+    for reason in detail.get("reasons", []):
+        st.write(f"- {reason}")
+
+    st.write("**Beskrivning**")
+    st.write(detail.get("description") or "Ingen langre beskrivning hittades i Blocket-svaret.")
+
+    if detail.get("extras"):
+        st.write("**Extra annonsdata**")
+        for extra in detail["extras"]:
+            st.write(f"- {extra}")
+
+    if detail.get("detail_error"):
+        st.warning(f"Kunde inte hamta detaljsidan, visar sokresultatet: {detail['detail_error']}")
+
+    st.link_button("Oppna annonsen pa Blocket", detail.get("url") or "https://www.blocket.se/")
 
 
 st.title("Smart Sokning pa Blocket")
@@ -341,7 +472,18 @@ if ads:
 elif intent:
     st.warning("Blocket gav inga annonser som matchade prompten och filtren.")
 
-for ad in ads:
+if st.session_state.result_comment:
+    st.markdown(
+        f"""
+<div class="summary-box">
+  <strong>AI-kommentar om mottagna resultat</strong>
+  <p class="reason">{html.escape(st.session_state.result_comment)}</p>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+for index, ad in enumerate(ads):
     trust = ad["trust"]
     css_class = "suspicious" if trust <= 5 else "warning" if trust <= 7 else ""
     badge_color = "#ef4444" if trust <= 5 else "#f59e0b" if trust <= 7 else "#22c55e"
@@ -366,3 +508,5 @@ for ad in ads:
 """,
         unsafe_allow_html=True,
     )
+    if st.button("Info", key=f"details-{ad.get('id')}-{index}"):
+        show_listing_dialog(index)
