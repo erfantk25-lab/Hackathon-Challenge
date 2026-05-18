@@ -10,12 +10,6 @@ Run from anywhere:
 
 import sys
 from pathlib import Path
-
-# Make src/ importable regardless of where this script is run from.
-# scripts/ is a sibling of backend/, so we add backend/ to sys.path.
-BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
-sys.path.insert(0, str(BACKEND_DIR))
-
 from datetime import datetime
 
 from sqlalchemy import text
@@ -23,6 +17,12 @@ from sqlalchemy import text
 from src.db.core import SessionLocal
 from src.db.models import Listing, ListingEmbedding
 from src.services.embedding_service import embed_text, EMBEDDING_MODEL_NAME
+
+# Make src/ importable regardless of where this script is run from.
+# scripts/ is a sibling of backend/, so we add backend/ to sys.path.
+BACKEND_DIR = Path(__file__).resolve().parent.parent / "backend"
+sys.path.insert(0, str(BACKEND_DIR))
+
 
 
 def main() -> None:
