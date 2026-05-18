@@ -1,19 +1,18 @@
 services:
-
-
   backend:
-    build: ./backend
+    build: .
     container_name: fastapi
     ports:
       - "8000:8000"
-    volumes:
-      - $HOME/docker_volumes/backend:/app/logs
     env_file:
-      - "./.env"
+      - ./src/.env
+    environment:
+      DB_HOST: postgres
+      POSTGRES_HOST: postgres
     depends_on:
-    condition: service_healthy
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
-
 
   postgres:
     image: postgres:16
@@ -27,6 +26,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hackathon_user -d hackathon_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

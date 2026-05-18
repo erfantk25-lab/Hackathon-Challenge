@@ -2,13 +2,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # Pydantic will automatically look for these names in the .env
-    POSTGRES_USER: str = ""
-    POSTGRES_PASSWORD: str = ""
-    POSTGRES_HOST: str = ""
-    POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str = ""
+    DB_USER: str = ""
+    DB_PASSWORD: str = ""
+    DB_HOST: str = ""
+    DB_PORT: int = 5432
+    DB_NAME: str = ""
 
+    @property
+    def DATABASE_URL(self) -> str:
+        return (
+            f"postgresql+psycopg://{self.DB_USER}:{self.DB_PASSWORD}"
+            f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        )
 
     @property
     def REDIS_URL(self) -> str:
